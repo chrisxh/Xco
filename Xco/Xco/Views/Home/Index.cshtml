@@ -1,0 +1,178 @@
+﻿@model Xco.Models.Link
+
+<style type="text/css">
+    .urlstyle, #OriginalUrl {
+        border: 0;
+        padding: 10px 10px 6px;
+        font-size: 40px;
+        color: #A7A9AC;
+        margin: 0 0 0 0;
+    }
+    #OriginalUrl {
+        width: 659px;
+        height: 47px;
+        background-image: url(content/themes/base/images/field_input.gif);
+        background-repeat: no-repeat;
+    }
+    #vanityurl {
+        margin-top:3px;
+        width:439px;
+    }
+</style>
+<header>
+    <div class="content-wrapper">
+        <div class="float-left">
+            <p class="site-title">
+                <a href="~/">xCo - a URL Shortener</a>
+            </p>
+        </div>
+    </div>
+</header>
+<div id="body">
+    <section class="content-wrapper main-content clear-fix">
+
+        <div style="float:right;width:200px;border: solid 1px #ccc; padding:8px;">
+            <label for="linkQuery">Search for a link:</label>
+            <input type="text" id="linkQuery" size="5" class="ui-input ui-corner-all" />
+            <button id="linkSearchButton" class="ui-button">Search</button>
+            <ul id="linkSearch" />
+        </div>
+
+        <div>
+            <form id="formAdd">
+                @Html.LabelFor(model => model.OriginalUrl)
+                <div>
+                    @Html.TextBoxFor(model => model.OriginalUrl, new { type = "url",  size = "40", placeholder = "http://" })
+                </div>
+                @Html.ValidationMessageFor(model => model.OriginalUrl, "Complete URL required for shortening")
+                
+                <div id="vanitycontainer">
+                    (optional) vanity path: <input type="text" id="vanityurl" name="vanityurl" maxlength="20" style="width:70px;"/>
+                </div>
+                <button id="buttonadd" class="ui-button" >Shorten</button>
+            </form>
+            <ul id="linkAddResult" />
+
+        </div>
+        
+
+        <h3>Shortened Urls:</h3>        
+        <ul class="round" id="links" />
+
+    </section>
+</div>
+<script type="text/javascript">
+    $(document).ready(function () {
+
+        $('#buttonadd').click(function (e) {
+            e.preventDefault();
+            add();
+        });
+        $('#linkSearchButton').click(find);
+        $('#linkQuery').keypress(function (e) {
+            if (e.which == 13) {
+                find();
+            }
+        });
+
+        //spin list
+        $('#links').block({
+            message: 'Loading URLs',
+            css: { border: '1px inset #AAA', color: '#999', padding: '8px', opacity: '0.6', fontSize: '28pt' }
+        });
+
+        // Send an AJAX request
+        $.getJSON("api/link/All",
+        function (data) {
+            // On success, 'data' contains a list of products.
+            $.each(data, function (key, val) {
+                // Add a list item for the product.
+                $('<li/>', { html: formatLink(val) })
+                .appendTo($('#links'));
+            });
+            $('#links').unblock();
+
+        });
+    });
+
+
+    function formatLink(val) {
+        var str = '<h3><a href="' + val.OriginalUrl + '">' + val.ShortenedUrl + '</a> <a class="ui-icon ui-icon-extlink" style="display: inline-block;width: 8px;" href="' + val.ShortenedUrl + '"></a></h3>' +
+                  '<div class="linkDetail">' +
+                        val.OriginalUrl + ' &#183; ' +
+                        'created: ' + moment(val.CreatedOn).format("ddd, MMM Do YYYY, h:mm:ss a") +
+                        (val.CreatedByEmail+'' != '' ? ' &#183; by: ' + val.CreatedByEmail : '' ) +
+                  '</div>';
+        return str;
+    }
+
+    function add() {
+        
+        if ($("#formAdd").valid()) {
+
+            var d = new Date();
+            var l = {
+                LinkId:0,
+                ShortenedUrl: $('#vanityurl').val(),
+                OriginalUrl: $('#OriginalUrl').val(),
+                CreatedOn: moment(d).format(),
+                CreatedByEmail: "",
+                IsVanityUrl: $('#vanityurl').val().length > 0,
+                ActivationDate: moment(d).format(),
+                DeactivationDate: null
+            };
+
+            $.post("api/link/Add", l, "json")
+                .done(function (newLink) {
+                    $('<li/>', { html: formatLink(newLink) })
+                        .addClass("AddedLink")
+                        .prependTo($('#links'))
+                        .effect("highlight", {}, 2000);
+                });
+        }
+    }
+
+    function find() {
+        var q = $('#linkQuery').val() + '';
+        var uri = "api/link/" + q;
+
+        $('#linkSearch').children().remove();
+
+        if (q.match(/^\d+$/ig) != null) {
+            uri = "api/link/" + q
+        }
+        else if (q.length > 0) {
+            uri = "api/link/Original/?Contains=" + encodeURIComponent(q)
+        }
+        else {
+            return;
+        }
+
+        //spin find
+        $('#linkSearch').block({
+            message: 'Searching...',
+            css: { border: '1px inset #AAA', color: '#999', padding: '4px', opacity: '0.6', fontSize: '12pt' }
+        });
+
+        $.getJSON(uri,
+            function (data) {
+                if (!$.isArray(data)) {
+                    data = $.makeArray(data);
+                }
+                $.each(data, function (key, val) {
+                    // Add a list item for the product.
+                    $('<li/>', { html: formatLink(val) })
+                    .appendTo($('#linkSearch'));
+                });
+                $('#linkSearch').unblock();
+
+            })
+        .fail(
+            function (jqXHR, textStatus, err) {
+                $('<div/>', { html: '<div class="ui-state-error ui-corner-all">Error: ' + err + '</div>' })
+                    .appendTo($('#linkSearch'));
+                $('#linkSearch').unblock();
+            });
+    }
+</script>
+
